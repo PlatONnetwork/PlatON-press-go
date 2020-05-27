@@ -80,7 +80,7 @@ func main() {
 	cmdFlag := flag.String("cmd", "transfer", "Batch send transaction type(transfer,staking,side_transfer,side_delegate,side_mix,side_random,rally3)")
 	accountsFlag := flag.String("accounts", "", "A json file store account's private key and address")
 	nodeCfg := flag.String("node_cfg", "", "Node list config file")
-	intervalMs := flag.Int("interval_ms", 100, "Send transaction interval")
+	intervalMs := flag.Int("interval_ms", 10000, "Send transaction interval")
 	count := flag.Int("count", 1, "How many accounts to send transactions")
 	idxFlag := flag.Int("idx", 0, "Index of accounts")
 	urlFlag := flag.String("url", "ws://127.0.0.1:8806", "platon node's RPC endpoint")
