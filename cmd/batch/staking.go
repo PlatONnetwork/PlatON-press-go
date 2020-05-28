@@ -3,141 +3,92 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/big"
-	"strings"
-	"sync/atomic"
+	"os"
 	"time"
 
-	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
+	"github.com/PlatONnetwork/PlatON-Go/crypto"
 	"github.com/PlatONnetwork/PlatON-Go/ethclient"
 	"github.com/awake006/platon-test-toolkits/util"
 )
 
-var contractAddr = common.HexToAddress("0x1000000000000000000000000000000000000002")
-
-type StakingBatchProcess struct {
-	accounts AccountList
-	hosts    []string
-
-	sendCh chan *Account
-	waitCh chan *ReceiptTask
-
-	exit chan struct{}
-
-	sents int32
-
-	stub *util.StakingStub
-
-	BatchProcessor
+type BatchStaking struct {
+	stakingConf    *StakingConfig
+	url            string
+	programVersion uint32
+	exit           chan struct{}
 }
 
-func NewStakingBatchProcess(accounts AccountList, hosts []string, nodeKey string) BatchProcessor {
-	return &StakingBatchProcess{
-		accounts: accounts,
-		hosts:    hosts,
-		sendCh:   make(chan *Account, 4096),
-		waitCh:   make(chan *ReceiptTask, 4096),
-		exit:     make(chan struct{}),
-		sents:    0,
-		stub:     util.NewStakingStub(nodeKey),
+type StakingConfig struct {
+	Nodekey    string
+	Blskey     string
+	NodeName   string
+	PrivateKey string
+}
+
+func NewBatchStaking(nodekey, blskey, nodeName, privateKey, url string, programVersion uint32) *BatchStaking {
+	fmt.Printf("program version: %d \n", programVersion)
+	stakingConf := &StakingConfig{
+		Nodekey:    nodekey,
+		Blskey:     blskey,
+		NodeName:   nodeName,
+		PrivateKey: privateKey,
+	}
+	return &BatchStaking{
+		stakingConf:    stakingConf,
+		url:            url,
+		programVersion: programVersion,
 	}
 }
 
-func (bp *StakingBatchProcess) Start() {
-	client, err := ethclient.Dial(bp.hosts[0])
-	if err != nil {
-		panic(err.Error())
-	}
-	fmt.Println("waiting batch")
+func (bs *BatchStaking) Start() {
+	var client *ethclient.Client
+	var err error
 	for {
-		if block, err := client.BlockByNumber(context.Background(), big.NewInt(10000)); err == nil && block != nil {
-			break
+		client, err = ethclient.Dial(bs.url)
+		if err != nil {
+			log.Printf("Failure to connect platon %s", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
 		}
-		time.Sleep(time.Second * 1)
-	}
-	fmt.Println("start batch")
-	go bp.report()
-
-	for _, host := range bp.hosts {
-		go bp.perform(host)
-	}
-
-	for _, act := range bp.accounts {
-		bp.sendCh <- act
-		time.Sleep(10 * time.Millisecond)
-	}
-	fmt.Println("start success")
-}
-
-func (bp *StakingBatchProcess) Stop() {
-	close(bp.exit)
-}
-
-func (bp *StakingBatchProcess) Pause()  {}
-func (bp *StakingBatchProcess) Resume() {}
-
-func (bp *StakingBatchProcess) SetSendInterval(d time.Duration) {}
-
-func (bp *StakingBatchProcess) report() {
-	timer := time.NewTimer(time.Second)
-	for {
-		select {
-		case <-timer.C:
-			cnt := atomic.SwapInt32(&bp.sents, 0)
-			fmt.Printf("Send: %d/s\n", cnt)
-			timer.Reset(time.Second)
-		case <-bp.exit:
-			return
-		}
-	}
-}
-
-func (bp *StakingBatchProcess) perform(host string) {
-	client, err := ethclient.Dial(host)
-	if err != nil {
-		panic(err)
+		break
 	}
 	defer client.Close()
 
-	sentCh := make(chan *Account, 1000)
-	receiptCh := make(chan *ReceiptTask, 1000)
-
 	for {
-		select {
-		case act := <-bp.sendCh:
-			if act.sendCh == nil {
-				act.sendCh = sentCh
-				act.receiptCh = receiptCh
-			}
-			bp.delegate(client, act)
-		case act := <-sentCh:
-			bp.delegate(client, act)
-		case task := <-receiptCh:
-			bp.getTransactionReceipt(client, task)
-		case <-bp.exit:
-			return
+		number := big.NewInt(100)
+		block, err := client.BlockByNumber(context.Background(), number)
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+		}
+		if block != nil && err == nil {
+			log.Println("Platon node mining now")
+			break
 		}
 	}
+	fmt.Println("start create staking")
+	bs.createStaking(client)
+	fmt.Println("end staking")
+	os.Exit(0)
 }
 
-func (bp *StakingBatchProcess) nonceAt(client *ethclient.Client, addr common.Address) uint64 {
-	var blockNumber *big.Int
-	nonce, err := client.NonceAt(context.Background(), addr, blockNumber)
-	if err != nil {
-		fmt.Printf("Get nonce error, addr: %s, err:%v\n", addr, err)
-		return 0
-	}
-	return nonce
-
-}
-
-func (bp *StakingBatchProcess) delegate(client *ethclient.Client, account *Account) {
-	buf, _ := bp.stub.Delegate("10000000000000000000")
-
+func (bs *BatchStaking) createStaking(client *ethclient.Client) {
+	stub := util.NewStakingStub(bs.stakingConf.Nodekey)
+	buf, _ := stub.Create(bs.stakingConf.Blskey, bs.stakingConf.NodeName, bs.programVersion)
 	signer := types.NewEIP155Signer(big.NewInt(ChainId))
-	nonce := bp.nonceAt(client, account.address)
-
+	accountPK, err := crypto.HexToECDSA(bs.stakingConf.PrivateKey)
+	if err != nil {
+		log.Printf("%s parse account privatekey error: %v", stub.NodeID.String(), err)
+		return
+	}
+	address := crypto.PubkeyToAddress(accountPK.PublicKey)
+	nonce, err := client.NonceAt(context.Background(), address, nil)
+	if err != nil {
+		log.Printf("%s get nonce error: %v", stub.NodeID.String(), err)
+		return
+	}
 	tx, err := types.SignTx(
 		types.NewTransaction(
 			nonce,
@@ -146,61 +97,43 @@ func (bp *StakingBatchProcess) delegate(client *ethclient.Client, account *Accou
 			103496,
 			big.NewInt(500000000000),
 			buf),
-		signer,
-		account.privateKey)
+		signer, accountPK)
 	if err != nil {
-		fmt.Printf("sign tx error %v\n", err)
-		bp.sendCh <- account
+		log.Printf("sign tx error: %v", err)
 		return
 	}
 
 	err = client.SendTransaction(context.Background(), tx)
-	account.lastSent = time.Now()
 	if err != nil {
-		fmt.Printf("Send delegate transaction error %v\n", err)
-		go func() {
-			<-time.After(50 * time.Millisecond)
-			account.sendCh <- account
-		}()
-		return
-	}
-	atomic.AddInt32(&bp.sents, 1)
-	go func() {
-		<-time.After(600 * time.Millisecond)
-		account.receiptCh <- &ReceiptTask{
-			account: account,
-			hash:    tx.Hash(),
-		}
-	}()
-}
-
-func (bp *StakingBatchProcess) getTransactionReceipt(client *ethclient.Client, task *ReceiptTask) {
-	receipt, err := client.TransactionReceipt(context.Background(), task.hash)
-	if err != nil {
-		if time.Since(task.account.lastSent) >= task.account.interval {
-			fmt.Printf("get receipt timeout, address:%s, hash: %s sendTime: %v, now: %v\n",
-				task.account.address.String(), task.hash.String(), task.account.lastSent, time.Now())
-			task.account.sendCh <- task.account
-			return
-		}
-		go func() {
-			<-time.After(300 * time.Millisecond)
-			task.account.receiptCh <- task
-		}()
+		log.Printf("%s send create staking transaction error %v", stub.NodeID.String(), err)
 		return
 	}
 
-	if len(receipt.Logs) > 0 {
-		result := string(receipt.Logs[0].Data[2:])
-		if strings.Contains(result, "Delegate failed: Account of Candidate(Validator)") {
-			fmt.Printf("%s\n", result)
+	t := time.Now()
+	timer := time.NewTimer(100 * time.Millisecond)
+	defer timer.Stop()
+	fmt.Printf("transaction hash %s", tx.Hash().String())
+	for {
+		select {
+		case <-timer.C:
+			_, err = client.TransactionReceipt(context.Background(), tx.Hash())
+			if err == nil {
+				log.Printf("%s create staking success!!!\n", stub.NodeID.String())
+				return
+			}
+			if time.Since(t) > 120*time.Second {
+				log.Printf("%s Get transaction receipt timeout %s", stub.NodeID.String(), tx.Hash().String())
+				return
+			}
+			timer.Reset(100 * time.Millisecond)
+		case <-bs.exit:
+			fmt.Println("exit")
 			return
 		}
-		// fmt.Printf("Staking txHash: %s, result: %s\n", task.hash.String(), receipt.Logs[0].Data[2:])
 	}
-
-	go func() {
-		<-time.After(50 * time.Millisecond)
-		task.account.sendCh <- task.account
-	}()
 }
+
+func (bs *BatchStaking) Stop()                           {}
+func (bs *BatchStaking) Pause()                          {}
+func (bs *BatchStaking) Resume()                         {}
+func (bs *BatchStaking) SetSendInterval(d time.Duration) {}

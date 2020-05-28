@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,6 +22,8 @@ type BatchProcess struct {
 
 	sendCh chan *Account
 	waitCh chan *ReceiptTask
+
+	signer types.EIP155Signer
 
 	exit chan struct{}
 
@@ -40,31 +43,32 @@ func NewBatchProcess(accounts AccountList, hosts []string) *BatchProcess {
 	bp := &BatchProcess{
 		accounts: accounts,
 		hosts:    hosts,
-		sendCh:   make(chan *Account, 10000),
-		waitCh:   make(chan *ReceiptTask, 10000),
+		sendCh:   make(chan *Account, len(accounts)),
+		waitCh:   make(chan *ReceiptTask, 1),
+		signer:   types.NewEIP155Signer(big.NewInt(ChainId)),
 		exit:     make(chan struct{}),
 		sents:    0,
 		paused:   false,
 	}
 	bp.cond = sync.NewCond(&bp.lock)
-	bp.sendInterval.Store(20 * time.Millisecond)
+	bp.sendInterval.Store(50 * time.Millisecond)
 	return bp
 }
 
 func (bp *BatchProcess) Start() {
 
-	client, err := ethclient.Dial(bp.hosts[0])
-	if err != nil {
-		panic(err.Error())
-	}
-	fmt.Println("waiting batch")
-	for {
-		if block, err := client.BlockByNumber(context.Background(), big.NewInt(10000)); err == nil && block != nil {
-			break
-		}
-		time.Sleep(time.Second * 1)
-	}
-	fmt.Println("start batch")
+	// client, err := ethclient.Dial(bp.hosts[0])
+	// if err != nil {
+	// 	panic(err.Error())
+	// }
+	// fmt.Println("waiting batch")
+	// for {
+	// 	if block, err := client.BlockByNumber(context.Background(), big.NewInt(10000)); err == nil && block != nil {
+	// 		break
+	// 	}
+	// 	time.Sleep(time.Second * 1)
+	// }
+	// fmt.Println("start batch")
 	go bp.report()
 
 	for _, host := range bp.hosts {
@@ -124,8 +128,8 @@ func (bp *BatchProcess) perform(host string) {
 	}
 	defer client.Close()
 
-	sentCh := make(chan *Account, 1000)
-	receiptCh := make(chan *ReceiptTask, 1000)
+	sentCh := make(chan *Account, len(bp.accounts))
+	receiptCh := make(chan *ReceiptTask, len(bp.accounts))
 
 	for {
 		bp.cond.L.Lock()
@@ -179,9 +183,16 @@ func (bp *BatchProcess) randomAccount(account *Account) *Account {
 	return bp.accounts[r]
 }
 
+func randomToAddrKey() AddrKey {
+	dataLen := len(toAccount)
+	idx := rand.Intn(dataLen)
+	return toAccount[idx]
+}
+
 func (bp *BatchProcess) sendTransaction(client *ethclient.Client, account *Account) {
 	to := bp.randomAccount(account)
-	signer := types.NewEIP155Signer(big.NewInt(ChainId))
+	// to := randomToAddrKey()
+	// signer := types.NewEIP155Signer(big.NewInt(ChainId))
 	nonce := bp.nonceAt(client, account.address)
 	// if nonce < account.nonce {
 	//	nonce = account.nonce
@@ -194,7 +205,7 @@ func (bp *BatchProcess) sendTransaction(client *ethclient.Client, account *Accou
 			21000,
 			big.NewInt(500000000000),
 			nil)
-		signedTx, err := types.SignTx(tx, signer, account.privateKey)
+		signedTx, err := types.SignTx(tx, bp.signer, account.privateKey)
 		if err != nil {
 			fmt.Printf("sign tx error: %v\n", err)
 			bp.sendCh <- account
@@ -221,7 +232,7 @@ func (bp *BatchProcess) sendTransaction(client *ethclient.Client, account *Accou
 		}
 
 		go func() {
-			<-time.After(600 * time.Millisecond)
+			<-time.After(2 * time.Second)
 			account.receiptCh <- &ReceiptTask{
 				account: account,
 				hash:    signedTx.Hash(),
