@@ -11,7 +11,7 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
 	"github.com/PlatONnetwork/PlatON-Go/ethclient"
-	"github.com/awake006/platon-test-toolkits/util"
+	"github.com/PlatONnetwork/PlatON-press-go/util"
 )
 
 var contractAddr = common.HexToAddress("0x1000000000000000000000000000000000000002")

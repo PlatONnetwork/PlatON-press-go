@@ -11,7 +11,7 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
 	"github.com/PlatONnetwork/PlatON-Go/crypto"
 	"github.com/PlatONnetwork/PlatON-Go/ethclient"
-	"github.com/awake006/platon-test-toolkits/util"
+	"github.com/PlatONnetwork/PlatON-press-go/util"
 )
 
 type BatchStaking struct {

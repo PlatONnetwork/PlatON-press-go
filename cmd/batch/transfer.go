@@ -194,16 +194,13 @@ func (bp *BatchProcess) sendTransaction(client *ethclient.Client, account *Accou
 	// to := randomToAddrKey()
 	// signer := types.NewEIP155Signer(big.NewInt(ChainId))
 	nonce := bp.nonceAt(client, account.address)
-	// if nonce < account.nonce {
-	//	nonce = account.nonce
-	// }
 	for i := 0; i < maxSendTxns; i++ {
 		tx := types.NewTransaction(
 			nonce,
 			to.address,
 			big.NewInt(200),
 			21000,
-			big.NewInt(500000000000),
+			big.NewInt(10000000000),
 			nil)
 		signedTx, err := types.SignTx(tx, bp.signer, account.privateKey)
 		if err != nil {
