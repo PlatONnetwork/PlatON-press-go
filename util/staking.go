@@ -20,8 +20,6 @@ type StakingStub struct {
 	Address    common.Address
 }
 
-var version = uint32(2816)
-
 func NewStakingStub(privateKey string) *StakingStub {
 	pk, nodeId, addr, err := parsePrivateKey(privateKey)
 	if err != nil {
@@ -45,7 +43,7 @@ func parsePrivateKey(privateKey string) (*ecdsa.PrivateKey, discover.NodeID, com
 	return nodePk, nodeID, nodeAddr, nil
 }
 
-func (stub *StakingStub) Create(blsKey, nodeName string) ([]byte, error) {
+func (stub *StakingStub) Create(blsKey, nodeName string, proVersion uint32) ([]byte, error) {
 	fnType, _ := rlp.EncodeToBytes(uint16(1000))
 	typ, _ := rlp.EncodeToBytes(uint16(0))
 	benefitAddress, _ := rlp.EncodeToBytes(stub.Address)
@@ -56,10 +54,10 @@ func (stub *StakingStub) Create(blsKey, nodeName string) ([]byte, error) {
 	details, _ := rlp.EncodeToBytes(nodeName + " super node")
 	st, _ := big.NewInt(0).SetString("5000000000000000000000000", 10)
 	amount, _ := rlp.EncodeToBytes(st)
-	programVersion, _ := rlp.EncodeToBytes(version)
+	programVersion, _ := rlp.EncodeToBytes(proVersion)
 	rewardPer, _ := rlp.EncodeToBytes(uint64(1000))
 	var versionSign common.VersionSign
-	buf, err := crypto.Sign(node.RlpHash(version).Bytes(), stub.PrivateKey)
+	buf, err := crypto.Sign(node.RlpHash(proVersion).Bytes(), stub.PrivateKey)
 	if err != nil {
 		return nil, err
 	}

@@ -24,6 +24,7 @@ const (
 )
 
 var ChainId int64 = 100
+var toAccount AddrKeyList
 
 type AddrKey struct {
 	Address string `json:"address"`
@@ -77,7 +78,7 @@ type BatchProcessor interface {
 func main() {
 	log.SetFlags(0)
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	cmdFlag := flag.String("cmd", "transfer", "Batch send transaction type(transfer,staking,side_transfer,side_delegate,side_mix,side_random,rally3)")
+	cmdFlag := flag.String("cmd", "side_transfer", "Batch send transaction type(transfer,staking,side_transfer,side_delegate,side_mix,side_random,rally3)")
 	accountsFlag := flag.String("accounts", "", "A json file store account's private key and address")
 	nodeCfg := flag.String("node_cfg", "", "Node list config file")
 	intervalMs := flag.Int("interval_ms", 10000, "Send transaction interval")
@@ -95,7 +96,9 @@ func main() {
 	randAccountsFlag := flag.String("rand_accounts", "", "A file store account's address")
 	randIdxFlag := flag.Int("rand_idx", 0, "Index of random accounts")
 	delegateNodes := flag.String("delegate_nodes", "", "A file store a list of node ID for delegate")
-
+	programVersionFlag := flag.Int64("program_version", 2562, "create staking program version")
+	privateKeyFlag := flag.String("private_key", "", "create staking address private key")
+	// toAccountFileFlag := flag.String("to_account", "/data/to_keys.json", "addr for random transfer")
 	flag.Parse()
 
 	ChainId = *chanIdFlag
@@ -104,6 +107,7 @@ func main() {
 	var bp BatchProcessor
 
 	accounts := parseAccountFile(*accountsFlag, *idxFlag, *count, *intervalMs)
+	// toAccount = parseToAccountFile(*toAccountFileFlag)
 
 	switch *cmdFlag {
 	case "transfer":
@@ -169,6 +173,8 @@ func main() {
 			*nodeNameFlag,
 			*onlyConsensusFlag,
 			*stakingFlag)
+	case "batch_staking":
+		bp = NewBatchStaking(*nodeKeyFlag, *blsKeyFlag, *nodeNameFlag, *privateKeyFlag, *urlFlag, uint32(*programVersionFlag))
 	default:
 		log.Fatalf("Unexpected cmd %s", *cmdFlag)
 		return
@@ -220,6 +226,21 @@ func parseAccountFile(accountFile string, idx, count, interval int) AccountList 
 		})
 	}
 	return accounts
+}
+
+func parseToAccountFile(accountFile string) AddrKeyList {
+	var addrKeyList AddrKeyList
+	b, err := ioutil.ReadFile(accountFile)
+	if err != nil {
+		panic(err)
+	}
+
+	err = json.Unmarshal(b, &addrKeyList)
+	if err != nil {
+		panic(err)
+	}
+
+	return addrKeyList
 }
 
 func parseHosts(nodeCfg string) []string {

@@ -17,7 +17,8 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/re
 COPY --from=builder /go/src/github.com/awake006/platon-test-toolkits/cmd/batch/batch /usr/local/bin/
 COPY --from=builder /go/src/github.com/awake006/platon-test-toolkits/entrypoint.sh /usr/local/bin/
 ADD ./cmd/batch/all_addr_and_private_keys.json /data/
-ADD ./cmd/gen_accounts/1m_accounts.json /data/
+#ADD ./cmd/batch/to_keys.json /data/
+# ADD ./cmd/gen_accounts/1m_accounts.json /data/
 
 ENV URL="ws://127.0.0.1:8806"
 ENV INTERVAL=10000
@@ -26,7 +27,7 @@ ENV COUNT=50
 ENV NODEKEY=""
 ENV BLSKEY=""
 ENV NODENAME=""
-ENV CMD="side_transfer"
+ENV USE_CMD="side_transfer"
 ENV ONLY_CONSENSUS_FLAG="false"
 ENV STAKING_FLAG="false"
 ENV DELEGATE_FLAG="false"
@@ -34,5 +35,7 @@ ENV RAND_COUNT=10000
 ENV R_ACCOUNT="false"
 ENV CHAINID=101
 ENV R_IDX=0
+ENV PRIVATE_KEY=""
+ENV PROGRAM_VERSION=2816
 
 CMD ["entrypoint.sh"]

@@ -12,7 +12,7 @@ import (
 	"github.com/PlatONnetwork/PlatON-Go/common"
 	"github.com/PlatONnetwork/PlatON-Go/core/types"
 	"github.com/PlatONnetwork/PlatON-Go/ethclient"
-	"github.com/awake006/platon-test-toolkits/util"
+	"github.com/PlatONnetwork/PlatON-press-go/util"
 )
 
 type BatchMixProcess struct {
